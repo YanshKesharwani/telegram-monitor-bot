@@ -4,16 +4,19 @@ import time
 import logging
 import shutil
 import requests
+import traceback
 from bs4 import BeautifulSoup
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from threading import Thread
 from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
+import asyncio
 
 # Load .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 bot = Bot(BOT_TOKEN)
 
 # Constants
@@ -31,6 +34,13 @@ logger = logging.getLogger(__name__)
 user_urls = {}
 paused_users = set()
 last_seen_posts = {}
+
+# ------------------------ Admin Notifier ------------------------ #
+async def notify_admin(message: str):
+    try:
+        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=message)
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to send admin alert: {e}")
 
 # ------------------------ Persistence ------------------------ #
 def load_data():
@@ -169,19 +179,28 @@ def check_websites():
 
 # ------------------------ Main ------------------------ #
 def main():
-    load_data()
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    try:
+        load_data()
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("add", add))
-    app.add_handler(CommandHandler("list", list_urls))
-    app.add_handler(CommandHandler("remove", remove))
-    app.add_handler(CommandHandler("clear", clear))
-    app.add_handler(CommandHandler("pause", pause))
-    app.add_handler(CommandHandler("resume", resume))
-    app.add_handler(CommandHandler("help", help_command))
+        app.add_handler(CommandHandler("add", add))
+        app.add_handler(CommandHandler("list", list_urls))
+        app.add_handler(CommandHandler("remove", remove))
+        app.add_handler(CommandHandler("clear", clear))
+        app.add_handler(CommandHandler("pause", pause))
+        app.add_handler(CommandHandler("resume", resume))
+        app.add_handler(CommandHandler("help", help_command))
 
-    Thread(target=check_websites, daemon=True).start()
-    app.run_polling()
+        Thread(target=check_websites, daemon=True).start()
+
+        # Notify admin that bot started
+        asyncio.run(notify_admin("✅ Bot started and is now monitoring."))
+        app.run_polling()
+
+    except Exception as e:
+        err_text = f"❌ Bot crashed:\n{e}\n\n{traceback.format_exc()}"
+        asyncio.run(notify_admin(err_text))
+        raise
 
 if __name__ == "__main__":
     main()
