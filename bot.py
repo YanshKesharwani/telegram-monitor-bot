@@ -179,24 +179,24 @@ def check_websites():
 
 # ------------------------ Main ------------------------ #
 def main():
+    load_data()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("add", add))
+    app.add_handler(CommandHandler("list", list_urls))
+    app.add_handler(CommandHandler("remove", remove))
+    app.add_handler(CommandHandler("clear", clear))
+    app.add_handler(CommandHandler("pause", pause))
+    app.add_handler(CommandHandler("resume", resume))
+    app.add_handler(CommandHandler("help", help_command))
+
+    Thread(target=check_websites, daemon=True).start()
+
+    # Notify admin that bot started
+    asyncio.run(notify_admin("✅ Bot started and is now monitoring."))
+
     try:
-        load_data()
-        app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-        app.add_handler(CommandHandler("add", add))
-        app.add_handler(CommandHandler("list", list_urls))
-        app.add_handler(CommandHandler("remove", remove))
-        app.add_handler(CommandHandler("clear", clear))
-        app.add_handler(CommandHandler("pause", pause))
-        app.add_handler(CommandHandler("resume", resume))
-        app.add_handler(CommandHandler("help", help_command))
-
-        Thread(target=check_websites, daemon=True).start()
-
-        # Notify admin that bot started
-        asyncio.run(notify_admin("✅ Bot started and is now monitoring."))
-        app.run_polling()
-
+        asyncio.run(app.run_polling())
     except Exception as e:
         err_text = f"❌ Bot crashed:\n{e}\n\n{traceback.format_exc()}"
         asyncio.run(notify_admin(err_text))
