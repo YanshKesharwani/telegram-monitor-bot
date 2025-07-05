@@ -57,11 +57,11 @@ def load_data():
                 data = json.load(f)
                 user_urls.update(data.get("user_urls", {}))
                 paused_users.update(data.get("paused_users", []))
-                last_content.update(data.get("last_content", {}))  # NEW
+                last_content.update(data.get("last_content", {}))
         else:
             user_urls.clear()
             paused_users.clear()
-            last_content.clear()  # NEW
+            last_content.clear()
     except Exception as e:
         logger.warning(f"Failed to load {DATA_FILE}: {e}")
         user_urls.clear()
@@ -73,7 +73,7 @@ def save_data():
         data = {
             "user_urls": user_urls,
             "paused_users": list(paused_users),
-            "last_content": last_content  # NEW
+            "last_content": last_content
         }
         if os.path.exists(DATA_FILE):
             shutil.copy(DATA_FILE, DATA_BACKUP)
@@ -157,9 +157,35 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/clear – Clear all monitored URLs\n"
         "/pause – Stop receiving updates\n"
         "/resume – Resume monitoring\n"
+        "/get <url> – Get current content without resetting monitor\n"
         "/help – Show this help message"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def get_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = str(update.effective_chat.id)
+    if len(context.args) != 1:
+        await update.message.reply_text("❌ Usage: /get <website_url>")
+        return
+
+    url = context.args[0]
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        soup = BeautifulSoup(response.text, 'html.parser')
+        post_section = soup.find("div", class_="post")
+        if not post_section:
+            await update.message.reply_text("⚠️ Could not find content section.")
+            return
+
+        content = post_section.text.strip()
+        preview = content[:800] + "..." if len(content) > 800 else content
+
+        msg = f"📄 <b>Current Content Preview</b>\n\n🔗 <a href='{url}'>{url}</a>\n\n📰 <pre>{preview}</pre>"
+        await update.message.reply_text(msg, parse_mode="HTML", disable_web_page_preview=True)
+
+    except Exception as e:
+        logger.error(f"Error in /get: {e}")
+        await update.message.reply_text("❌ Failed to fetch content.")
 
 # ------------------------ Scraper Thread ------------------------ #
 def categorize(text: str) -> str:
@@ -201,7 +227,6 @@ def check_websites():
 
                     if url not in last_seen_posts or last_seen_posts[url] != content_hash:
                         category = categorize(content)
-
                         old_content = last_content.get(url, "")
                         diff_text = highlight_diff(old_content, content) if old_content else content[:500]
 
@@ -232,6 +257,7 @@ async def main():
         app.add_handler(CommandHandler("clear", clear))
         app.add_handler(CommandHandler("pause", pause))
         app.add_handler(CommandHandler("resume", resume))
+        app.add_handler(CommandHandler("get", get_content))
         app.add_handler(CommandHandler("help", help_command))
 
         Thread(target=check_websites, daemon=True).start()
