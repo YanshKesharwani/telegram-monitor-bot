@@ -11,11 +11,11 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from threading import Thread
 from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
-import nest_asyncio
 import asyncio
+import nest_asyncio
 
+# Apply asyncio patch for environments like Jupyter or Render
 nest_asyncio.apply()
-asyncio.get_event_loop().run_until_complete(main())
 
 # Load .env
 load_dotenv()
@@ -42,7 +42,7 @@ last_seen_posts = {}
 # ------------------------ Admin Notifier ------------------------ #
 async def notify_admin(message: str):
     try:
-        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=message)
+        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"[ERROR] Failed to send admin alert: {e}")
 
@@ -183,24 +183,26 @@ def check_websites():
 
 # ------------------------ Main ------------------------ #
 async def main():
-    load_data()
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    try:
+        load_data()
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("add", add))
-    app.add_handler(CommandHandler("list", list_urls))
-    app.add_handler(CommandHandler("remove", remove))
-    app.add_handler(CommandHandler("clear", clear))
-    app.add_handler(CommandHandler("pause", pause))
-    app.add_handler(CommandHandler("resume", resume))
-    app.add_handler(CommandHandler("help", help_command))
+        app.add_handler(CommandHandler("add", add))
+        app.add_handler(CommandHandler("list", list_urls))
+        app.add_handler(CommandHandler("remove", remove))
+        app.add_handler(CommandHandler("clear", clear))
+        app.add_handler(CommandHandler("pause", pause))
+        app.add_handler(CommandHandler("resume", resume))
+        app.add_handler(CommandHandler("help", help_command))
 
-    # ✅ Start background thread AFTER app is built and before polling
-    Thread(target=check_websites, daemon=True).start()
+        Thread(target=check_websites, daemon=True).start()
 
-    # ✅ Await polling inside async function
-    await app.run_polling()
+        await notify_admin("✅ *Bot started and is now monitoring websites.*")
+        await app.run_polling()
+    except Exception as e:
+        error_msg = f"❌ *Bot crashed:*\n```\n{traceback.format_exc()}\n```"
+        await notify_admin(error_msg)
 
+# ------------------------ Start App ------------------------ #
 if __name__ == "__main__":
-    import nest_asyncio
-    nest_asyncio.apply()
     asyncio.get_event_loop().run_until_complete(main())
