@@ -5,6 +5,7 @@ import logging
 import shutil
 import requests
 import traceback
+import difflib
 from bs4 import BeautifulSoup
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 user_urls = {}
 paused_users = set()
 last_seen_posts = {}
+last_content = {}  # NEW
 
 # ------------------------ Admin Notifier ------------------------ #
 async def notify_admin(message: str):
@@ -48,26 +50,30 @@ async def notify_admin(message: str):
 
 # ------------------------ Persistence ------------------------ #
 def load_data():
-    global user_urls, paused_users
+    global user_urls, paused_users, last_content
     try:
         if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
             with open(DATA_FILE, "r") as f:
                 data = json.load(f)
                 user_urls.update(data.get("user_urls", {}))
                 paused_users.update(data.get("paused_users", []))
+                last_content.update(data.get("last_content", {}))  # NEW
         else:
             user_urls.clear()
             paused_users.clear()
+            last_content.clear()  # NEW
     except Exception as e:
         logger.warning(f"Failed to load {DATA_FILE}: {e}")
         user_urls.clear()
         paused_users.clear()
+        last_content.clear()
 
 def save_data():
     try:
         data = {
             "user_urls": user_urls,
-            "paused_users": list(paused_users)
+            "paused_users": list(paused_users),
+            "last_content": last_content  # NEW
         }
         if os.path.exists(DATA_FILE):
             shutil.copy(DATA_FILE, DATA_BACKUP)
@@ -156,6 +162,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 # ------------------------ Scraper Thread ------------------------ #
+def categorize(text: str) -> str:
+    text = text.lower()
+    if "result" in text:
+        return "📄 Result"
+    elif "admit card" in text or "hall ticket" in text:
+        return "🎫 Admit Card"
+    elif "recruitment" in text or "vacancy" in text or "job" in text:
+        return "💼 Job Update"
+    else:
+        return "📌 General Update"
+
+def highlight_diff(old, new):
+    diff = list(difflib.ndiff(old.splitlines(), new.splitlines()))
+    highlighted = []
+    for line in diff:
+        if line.startswith("+ "):
+            highlighted.append(f"➕ {line[2:]}")
+        elif line.startswith("- "):
+            highlighted.append(f"➖ {line[2:]}")
+    return "\n".join(highlighted[:30])
+
 def check_websites():
     while True:
         for chat_id, urls in user_urls.items():
@@ -169,12 +196,24 @@ def check_websites():
                     if not post_section:
                         continue
 
-                    latest_text = post_section.text.strip()
-                    content_hash = hash(latest_text)
+                    content = post_section.text.strip()
+                    content_hash = hash(content)
 
                     if url not in last_seen_posts or last_seen_posts[url] != content_hash:
+                        category = categorize(content)
+
+                        old_content = last_content.get(url, "")
+                        diff_text = highlight_diff(old_content, content) if old_content else content[:500]
+
                         last_seen_posts[url] = content_hash
-                        msg = f"🆕 <b>New Update!</b>\n\n🔗 <a href='{url}'>{url}</a>\n\n📰 {latest_text[:400]}..."
+                        last_content[url] = content
+                        save_data()
+
+                        msg = (
+                            f"{category}\n"
+                            f"🔗 <a href='{url}'>{url}</a>\n\n"
+                            f"<pre>{diff_text[:3000]}</pre>"
+                        )
                         bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML", disable_web_page_preview=True)
 
                 except Exception as e:
