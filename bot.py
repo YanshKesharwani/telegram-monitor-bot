@@ -178,7 +178,7 @@ def check_websites():
         time.sleep(CHECK_INTERVAL)
 
 # ------------------------ Main ------------------------ #
-def main():
+async def main():
     load_data()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -190,17 +190,11 @@ def main():
     app.add_handler(CommandHandler("resume", resume))
     app.add_handler(CommandHandler("help", help_command))
 
+    # ✅ Start background thread AFTER app is built and before polling
     Thread(target=check_websites, daemon=True).start()
 
-    # Notify admin that bot started
-    asyncio.run(notify_admin("✅ Bot started and is now monitoring."))
-
-    try:
-        asyncio.run(app.run_polling())
-    except Exception as e:
-        err_text = f"❌ Bot crashed:\n{e}\n\n{traceback.format_exc()}"
-        asyncio.run(notify_admin(err_text))
-        raise
+    # ✅ Await polling inside async function
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
