@@ -11,7 +11,11 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from threading import Thread
 from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
+import nest_asyncio
 import asyncio
+
+nest_asyncio.apply()
+asyncio.get_event_loop().run_until_complete(main())
 
 # Load .env
 load_dotenv()
@@ -197,4 +201,6 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import nest_asyncio
+    nest_asyncio.apply()
+    asyncio.get_event_loop().run_until_complete(main())
