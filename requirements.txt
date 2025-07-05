@@ -3,4 +3,3 @@ feedparser
 beautifulsoup4
 requests
 python-dotenv
-traceback
