@@ -1,0 +1,8 @@
+app = "telegram-monitor-bot"
+primary_region = "ams"  # or any close region like sin, bom, etc.
+
+[env]
+  PORT = "8080"
+
+[build]
+  dockerfile = "Dockerfile"
